@@ -15,8 +15,7 @@ st.set_page_config(page_title="Sistema de Rotas Inteligente", layout="wide")
 if "CHAVE_GOOGLE" in st.secrets:
     CHAVE_GOOGLE = st.secrets["CHAVE_GOOGLE"]
 else:
-    CHAVE_GOOGLE = "" # Deixa vazio para segurança no GitHub
-
+    CHAVE_GOOGLE = "" 
 # --- FUNÇÕES ---
 def obter_lat_long_google(endereco):
     try:
@@ -62,7 +61,7 @@ st.sidebar.markdown("---")
 consumo = st.sidebar.number_input("Consumo (km/L)", value=8.0)
 preco_gas = st.sidebar.number_input("Preço Diesel (R$)", value=5.89)
 
-# 2. UPLOAD DE ARQUIVO (AQUI ESTÁ A MÁGICA PARA A NUVEM!)
+# 2. UPLOAD DE ARQUIVO 
 st.info("📂 Passo 1: Arraste seu arquivo Excel abaixo")
 arquivo_carregado = st.file_uploader("Upload do arquivo de Clientes", type=["xlsx"])
 
@@ -169,3 +168,4 @@ if st.button("🚀 GERAR ROTA AGORA"):
 
     except Exception as e:
         st.error(f"Erro: {e}")
+
