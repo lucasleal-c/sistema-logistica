@@ -6,3 +6,4 @@ polyline
 streamlit-folium
 geopy
 openpyxl
+pdfplumber
