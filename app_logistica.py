@@ -11,11 +11,19 @@ import time
 # --- CONFIGURAÇÃO INICIAL ---
 st.set_page_config(page_title="Sistema de Rotas Inteligente", layout="wide")
 
-# --- SEGURANÇA DA CHAVE (CLOUD) ---
+# --- MEMÓRIA (SESSION STATE) ---
+# Isso impede que o mapa suma quando você interage com ele
+if 'rota_calculada' not in st.session_state:
+    st.session_state.rota_calculada = False
+if 'df_final' not in st.session_state:
+    st.session_state.df_final = None
+
+# --- SEGURANÇA DA CHAVE ---
 if "CHAVE_GOOGLE" in st.secrets:
     CHAVE_GOOGLE = st.secrets["CHAVE_GOOGLE"]
 else:
     CHAVE_GOOGLE = "" 
+
 # --- FUNÇÕES ---
 def obter_lat_long_google(endereco):
     try:
@@ -50,42 +58,41 @@ def pegar_trajeto_desenho(lat1, lon1, lat2, lon2):
     except:
         return [(lat1, lon1), (lat2, lon2)]
 
-# --- INTERFACE VISUAL ---
+# --- INTERFACE ---
 st.title("🚚 Otimizador de Rotas e Logística")
 st.markdown("---")
 
-# 1. BARRA LATERAL
 st.sidebar.header("⚙️ Configurações")
 modo_rota = st.sidebar.radio("Estratégia:", ("Modo Econômico", "Modo Caminhoneiro"))
 st.sidebar.markdown("---")
-consumo = st.sidebar.number_input("Consumo (km/L)", value=8.0)
-preco_gas = st.sidebar.number_input("Preço Diesel (R$)", value=5.89)
 
-# 2. UPLOAD DE ARQUIVO 
+# Se já calculou a rota, não precisa mostrar o upload de novo, mas deixamos acessível no topo se quiser trocar
 st.info("📂 Passo 1: Arraste seu arquivo Excel abaixo")
-arquivo_carregado = st.file_uploader("Upload do arquivo de Clientes", type=["xlsx"])
+arquivo_carregado = st.file_uploader("Upload do arquivo de Clientes", type=["xlsx"], key="upload_principal")
 
+# BOTÃO DE AÇÃO
 if st.button("🚀 GERAR ROTA AGORA"):
     
+    # Validações
     if arquivo_carregado is None:
         st.error("⚠️ Você precisa enviar um arquivo Excel antes!")
         st.stop()
-        
     if CHAVE_GOOGLE == "":
-        st.error("⚠️ Erro de Segurança: Chave do Google não encontrada nos Secrets!")
+        st.error("⚠️ Erro: Chave do Google não configurada nos Secrets!")
         st.stop()
 
     bar = st.progress(0)
     status_text = st.empty()
     
     try:
+        # LÓGICA DE CÁLCULO
         status_text.text("Lendo Excel...")
         df = pd.read_excel(arquivo_carregado)
         
         if "Latitude" not in df.columns: df["Latitude"] = None
         if "Longitude" not in df.columns: df["Longitude"] = None
         
-        status_text.text("Consultando Google Maps...")
+        status_text.text("Geocodificando endereços...")
         for i, row in df.iterrows():
             lat_val = row["Latitude"]
             if pd.isna(lat_val) or str(lat_val).strip() == "":
@@ -103,7 +110,7 @@ if st.button("🚀 GERAR ROTA AGORA"):
             st.error("❌ Nenhum endereço válido encontrado.")
             st.stop()
             
-        status_text.text("Calculando Rota...")
+        status_text.text("Otimizando Rota...")
         base = df.iloc[0]
         clientes = df.iloc[1:].copy()
         rota_ordenada = [base]
@@ -140,32 +147,60 @@ if st.button("🚀 GERAR ROTA AGORA"):
             passos += 1
             bar.progress(0.5 + (passos / qtd_inicial * 0.5))
             
-        # MOSTRAR MAPA
-        st.subheader("🗺️ Mapa da Rota")
-        df_final = pd.DataFrame(rota_ordenada)
+        # SALVA NA MEMÓRIA
+        st.session_state.df_final = pd.DataFrame(rota_ordenada)
+        st.session_state.rota_calculada = True
         
+        status_text.text("Concluído!")
+        bar.empty()
+        st.rerun() # Recarrega a página para mostrar o mapa fixo
+
+    except Exception as e:
+        st.error(f"Erro: {e}")
+        st.session_state.rota_calculada = False
+
+# --- EXIBIÇÃO DO RESULTADO (FORA DO BOTÃO) ---
+if st.session_state.rota_calculada and st.session_state.df_final is not None:
+    st.markdown("---")
+    st.subheader("🗺️ Mapa da Rota Calculada")
+    
+    df_final = st.session_state.df_final
+    dist_total = 0
+    
+    try:
         m = folium.Map(location=[df_final["Latitude"].mean(), df_final["Longitude"].mean()], zoom_start=14)
-        dist_total = 0
-        links = []
         
         for i in range(len(df_final)):
             atual = df_final.iloc[i]
-            links.append(f"{atual['Latitude']},{atual['Longitude']}")
             icon = "home" if i == 0 else "info-sign"
             color = "green" if i == 0 else "red"
-            folium.Marker([atual['Latitude'], atual['Longitude']], popup=f"{i}. {atual['Rua']}", icon=folium.Icon(color=color, icon=icon)).add_to(m)
+            folium.Marker(
+                [atual['Latitude'], atual['Longitude']], 
+                popup=f"{i}. {atual['Rua']}", 
+                icon=folium.Icon(color=color, icon=icon)
+            ).add_to(m)
             
             if i < len(df_final) - 1:
                 prox = df_final.iloc[i+1]
                 trajeto = pegar_trajeto_desenho(atual['Latitude'], atual['Longitude'], prox['Latitude'], prox['Longitude'])
-                dist_total += obter_distancia_rodagem(atual['Latitude'], atual['Longitude'], prox['Latitude'], prox['Longitude'])
+                dist = obter_distancia_rodagem(atual['Latitude'], atual['Longitude'], prox['Latitude'], prox['Longitude'])
                 folium.PolyLine(trajeto, color="blue", weight=4).add_to(m)
-        
+                dist_total += dist
+            elif i == len(df_final) - 1:
+                # Volta pra base
+                base = df_final.iloc[0]
+                trajeto = pegar_trajeto_desenho(atual['Latitude'], atual['Longitude'], base['Latitude'], base['Longitude'])
+                dist = obter_distancia_rodagem(atual['Latitude'], atual['Longitude'], base['Latitude'], base['Longitude'])
+                folium.PolyLine(trajeto, color="gray", dash_array='5').add_to(m)
+                dist_total += dist
+
         st_folium(m, width=900, height=500)
-        st.success(f"Rota Gerada! Distância: {dist_total/1000:.1f} km")
-        status_text.empty()
-        bar.empty()
-
+        st.success(f"Distância Total Estimada: {dist_total/1000:.1f} km")
+        
+        if st.button("🔄 Reiniciar / Calcular Nova Rota"):
+            st.session_state.rota_calculada = False
+            st.session_state.df_final = None
+            st.rerun()
+            
     except Exception as e:
-        st.error(f"Erro: {e}")
-
+        st.error(f"Erro ao desenhar mapa: {e}")
