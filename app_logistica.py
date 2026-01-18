@@ -70,7 +70,7 @@ def obter_lat_long_google(endereco):
     except Exception as e: return None, None, f"Erro API: {str(e)}"
     return None, None, "Não encontrado"
 
-# --- AQUI ESTA A CORREÇÃO (RETRY + SLEEP) ---
+# --- (RETRY + SLEEP) ---
 def obter_distancia_rodagem(lat1, lon1, lat2, lon2):
     """Tenta pegar a distancia real 3 vezes antes de desistir"""
     loc = f"{lon1},{lat1};{lon2},{lat2}"
@@ -288,3 +288,4 @@ if st.session_state.rota_calculada and st.session_state.df_final is not None:
 
     with st.expander("📄 Detalhes"):
         st.dataframe(df_f[["Rua", "Origem"]])
+
