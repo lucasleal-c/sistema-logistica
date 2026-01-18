@@ -12,7 +12,7 @@ import time
 st.set_page_config(page_title="Sistema de Rotas Inteligente", layout="wide")
 
 # COLE SUA CHAVE DO GOOGLE AQUI
-CHAVE_GOOGLE = "AIzaSyBz4-MkVqZFX1N_GcIEhHwcHl_CH0PtAHE" 
+CHAVE_GOOGLE = "" 
 
 # --- INICIALIZAÇÃO DA MEMÓRIA (SESSION STATE) ---
 # Isso impede que o site "esqueça" a rota quando você mexe no mapa
@@ -254,4 +254,5 @@ if st.session_state.rota_calculada and st.session_state.df_final is not None:
             st.rerun()
             
     except Exception as e:
+
         st.error(f"Erro ao desenhar mapa: {e}")
